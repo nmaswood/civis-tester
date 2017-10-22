@@ -7,14 +7,14 @@ from functools import wraps
 from os import environ
 from pdb import set_trace
 from time import sleep
-import sys
+import sys, os
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support.ui import WebDriverWait
 from collections import deque
 
 TIME_BEFORE_QUIT = 4
-FAILURES_BEFORE_QUIT = 2
+FAILURES_BEFORE_QUIT = 4
 
 def flog(fname, level = 'info'):
 
@@ -29,7 +29,6 @@ def flog(fname, level = 'info'):
     def f(message):
 
         logging.basicConfig(filename=fname,level=logging.DEBUG,format='%(asctime)s %(message)s' )
-        print ("FUCK")
         {"info": logging.info, "debug" : logging.debug, "warning" : logging.warning}[level](message)
 
     return f
@@ -92,10 +91,37 @@ def login(func):
         try:
             res = func(*args_prime, **kwargs)
         except Exception as e:
-            print (e)
+            print ("Exception occured: {}".format(e))
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, fname, exc_tb.tb_lineno)
+
         sleep(TIME_BEFORE_QUIT)
         driver.quit()
     return with_logging
+
+
+class Queue():
+
+    def __init__(self):
+        self.q = deque()
+
+    def enqueue(self, val):
+        self.queue.append(val)
+        return val
+
+    def get(self):
+        return self.queue.popleft()
+
+class Item():
+
+    _id = 0
+
+    def __init__(self, f, name):
+        self.f = f
+        self.name = name
+        self.id = _id
+        Item._id +=1
 
 class Action():
 
@@ -112,12 +138,15 @@ class Action():
         action = self.queue.popleft()
         action()
 
-    def go(self):
+    def go(self, trace = False):
+        if trace:
+            set_trace()
         while len(self.queue):
             self.run_one()
 
-    def find(self, x):
+    def find(self, x, ret = True):
         def f():
+            xpath = self.d[x]
             def _find(driver, x, i):
                 if i == FAILURES_BEFORE_QUIT:
                     raise Exception("Too many times")
@@ -127,15 +156,19 @@ class Action():
                     print ("Try again {}".format(i))
                     sleep(2)
                     return _find(driver, x, i + 1)
-            return _find(self.driver,x, 0)
+            return _find(self.driver,xpath, 0)
 
-        return self.enqueue(f)
+        if ret:
+            return f()
+        else:
+            return self.enqueue(f)
 
     def send(self, x, val):
         def f():
             element = self.find(x)
             element.clear()
             element.send_keys(val)
+            print ("Sent {} to {}".format(val, x))
         return self.enqueue(f)
 
     def click(self, xpath):
@@ -143,18 +176,21 @@ class Action():
         def f():
             sleep(1)
             element = self.find(xpath)
-            element = WebDriverWait(driver, 10).until(
+            element = WebDriverWait(self.driver, 10).until(
                      EC.element_to_be_clickable((By.XPATH, self.d[xpath])));
             element.click()
+            print ("Just clicked {}".format(xpath))
         return self.enqueue(f)
 
     def zzz(self, time = 1):
         def f():
+            print ("Sleeping for {}".format(time))
             return sleep(time)
         return self.enqueue(f)
 
     def set_code_mirror(self, xpath, value):
         def f():
             el = self.find(xpath)
-            driver.execute_script("arguments[0].CodeMirror.setValue(\"" + value + "\");", el)
+            self.driver.execute_script("arguments[0].CodeMirror.setValue(\"" + value + "\");", el)
+            print ("Set code mirror to {}".format(value))
         return self.enqueue(f)

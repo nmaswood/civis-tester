@@ -26,11 +26,18 @@ def civp_8880(driver):
 
     browse = Action(driver, d)
     browse.click('scripts_menu_button')
+    browse.click('scripts_menu_button')
+    browse.zzz(4)
     browse.click('new_script_button')
     browse.click('new_sql_script')
-    browse.set_code_mirror(d['code_mirror_input'], "SELECT 1;")
+    browse.set_code_mirror('code_mirror_input', "SELECT 1;")
+    browse.click('notify_button')
+    browse.zzz(4)
+    browse.send('subject_input', "Test 1: SELECT 1;")
+    browse.send('email_input', "Look at this [report]{{file_url}}")
+    browse.click('close_button')
+    browse.click('run_button')
     browse.go()
-
 
     """
     click(driver, d['scripts_menu_button'])
